@@ -16,14 +16,7 @@ export default class Sketch {
         this.renderer.setSize(this.width, this.height);
         this.renderer.setClearColor(0xeeeeee, 1);
         this.container.appendChild(this.renderer.domElement);
-
-        // this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.001, 1000);
-
-        var frustumSize = 3;
-        var aspect = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, -1000, 1000);
-        this.camera.position.set(0, 0, 3);
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.setCamera('orthographic');
         this.time = 0;
         this.isPlaying = true;
 
@@ -32,6 +25,7 @@ export default class Sketch {
             lax: ['33.9416N', '118.4085W'],
             moscow: ['55.7558N', '37.6173E'],
             buenosAires: ['34.6037S', '58.3816W'],
+            lisbon: ['38.7223N', '9.1393W'],
             northPole: ['90N', '0'],
             southPole: ['90S', '0'],
             zeroZero: ['0', '0'],
@@ -42,6 +36,19 @@ export default class Sketch {
         this.setupResize();
     }
 
+    setCamera(
+        type = "perspective",
+    ) {
+        if (type === "perspective") {
+            this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.001, 1000);
+        } else if (type === "orthographic") {
+            const frustumSize = 3;
+            const aspect = window.innerWidth / window.innerHeight;
+            this.camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, -1000, 1000);
+        }
+        this.camera.position.set(0, 0, 3);
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    }
 
     settingsGUI() {
         let that = this;
@@ -77,54 +84,17 @@ export default class Sketch {
         this.plane = new THREE.Mesh(this.geometry, this.material);
 
         this.scene.add(this.plane);
-        this.addPin('northPole', this.cords.northPole, 0x0000ff);
 
+        this.scene.add(new THREE.AxesHelper(5));
+
+        this.addPin('northPole', this.cords.northPole, 0x0000ff);
         this.addPin('southPole', this.cords.southPole);
         this.addPin('zeroZero', this.cords.zeroZero);
-
-        // this.addPin('mazunte', this.cords.mazunte);
-        // this.addPin('lax', this.cords.lax, 0x00ff00);
-        // this.addPin('moscow', this.cords.moscow, 0x0000ff);
-        // this.addPin('buenosAires', this.cords.buenosAires, 0xffff00);
-    }
-
-    addPin(name, coordinates, color = 0xff0000) {
-
-        // Преобразование географических координат в сферические координаты
-        const latitude = this.parseLatitude(coordinates[0]);
-        const longitude = this.parseLongitude(coordinates[1]);
-        const phi = (90 - latitude) * Math.PI / 180;
-        const theta = (longitude + 180) * Math.PI / 180;
-
-        // Вычисление трехмерных координат на сфере
-        const x = Math.sin(phi) * Math.cos(theta);
-        const y = Math.cos(phi);
-        const z = Math.sin(phi) * Math.sin(theta);
-
-        console.log({
-            name,
-            coordinates,
-            latitude,
-            longitude,
-            phi,
-            theta,
-            x,
-            y,
-            z,
-        })
-
-        // Создание геометрии для точки (например, сферы)
-        const geometry = new THREE.SphereGeometry(0.05, 32, 32);
-
-        // Создание материала точки (например, основанного на цвете)
-        const material = new THREE.MeshBasicMaterial({color});
-
-        // Создание объекта точки и установка его позиции
-        const pin = new THREE.Mesh(geometry, material);
-        pin.position.set(x, y, z);
-
-        // Добавление точки на сферу
-        this.scene.add(pin);
+        this.addPin('mazunte', this.cords.mazunte);
+        this.addPin('lax', this.cords.lax, 0x00ff00);
+        this.addPin('moscow', this.cords.moscow, 0x0000ff);
+        this.addPin('buenosAires', this.cords.buenosAires, 0xffff00);
+        this.addPin('lisbon', this.cords.lisbon, 0xff0000);
     }
 
     parseLatitude(latitude) {
@@ -139,17 +109,7 @@ export default class Sketch {
         return direction?.toUpperCase() === 'W' ? -value : value;
     }
 
-    getPolus(cord) {
-        const lastSymbol = cord[cord.length - 1];
-        return {
-            north: lastSymbol === 'N',
-            south: lastSymbol === 'S',
-            west: lastSymbol === 'W',
-            east: lastSymbol === 'E',
-        }
-    }
-
-    adddPin(
+    addPin(
         name,
         pin,
         color = 0xff0000,
@@ -173,46 +133,19 @@ export default class Sketch {
         this.scene.add(mesh);
     }
 
-    getRadianAngle(deg) {
-        const parsed = parseFloat(deg);
-        console.log({
-            parsed
-        })
-        return parseFloat(deg) * (Math.PI / 180);
-    }
-
     getCords(
         lat,
         lng
     ) {
-        const polusLat = this.getPolus(lat);
-        const polusLng = this.getPolus(lng);
-        let latRad = this.getRadianAngle(lat);
-        let lngRad = this.getRadianAngle(lng);
+        const latitude = this.parseLatitude(lat);
+        const longitude = this.parseLongitude(lng);
+        const phi = (90 - latitude) * Math.PI / 180;
+        const theta = (longitude + 180) * Math.PI / 180;
 
-
-        console.log({
-            lat,
-            latRad,
-            lng,
-            lngRad
-        })
-        console.log({
-            polusLat,
-            polusLng
-        })
-
-        let x = Math.cos(lngRad) * Math.sin(latRad);
-        let y = Math.sin(lngRad) * Math.sin(latRad);
-        let z = Math.cos(latRad);
-
-        if (polusLat.south) {
-            y = -y;
-        }
-        if (polusLng.east) {
-            x = -x;
-            z = -z;
-        }
+        // если показано западное полушарие, то ставим минус
+        const x = -Math.sin(phi) * Math.cos(theta);
+        const y = Math.cos(phi);
+        const z = Math.sin(phi) * Math.sin(theta);
 
         return {
             x, y, z
