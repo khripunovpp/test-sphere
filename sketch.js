@@ -4,6 +4,8 @@ import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
 //
 import * as dat from "dat.gui";
 import earth from "./pics/earth-texture.jpg"
+import vertex from "./shader/vertex.glsl";
+import fragment from "./shader/fragment.glsl";
 
 export default class Sketch {
     constructor(options) {
@@ -26,9 +28,9 @@ export default class Sketch {
             moscow: ['55.7558N', '37.6173E'],
             buenosAires: ['34.6037S', '58.3816W'],
             lisbon: ['38.7223N', '9.1393W'],
-            northPole: ['90N', '0'],
-            southPole: ['90S', '0'],
-            zeroZero: ['0', '0'],
+            // northPole: ['90N', '0'],
+            // southPole: ['90S', '0'],
+            // zeroZero: ['0', '0'],
         };
         this.addObjects();
         this.resize();
@@ -77,7 +79,20 @@ export default class Sketch {
     addObjects() {
         this.material = new THREE.MeshBasicMaterial({
             map: new THREE.TextureLoader().load(earth)
-        })
+        });
+
+        this.shaderMaterial = new THREE.ShaderMaterial({
+            extensions: {
+                derivatives: "#extension GL_OES_standard_derivatives : enable",
+            },
+            uniforms: {
+                resolution: {value: new THREE.Vector4()},
+                time: {value: 0},
+            },
+            vertexShader: vertex,
+            fragmentShader: fragment,
+            side: THREE.DoubleSide,
+        });
 
         this.geometry = new THREE.SphereGeometry(1, 50, 50);
 
@@ -87,26 +102,51 @@ export default class Sketch {
 
         this.scene.add(new THREE.AxesHelper(5));
 
-        this.addPin('northPole', this.cords.northPole, 0x0000ff);
-        this.addPin('southPole', this.cords.southPole);
-        this.addPin('zeroZero', this.cords.zeroZero);
-        this.addPin('mazunte', this.cords.mazunte);
-        this.addPin('lax', this.cords.lax, 0x00ff00);
-        this.addPin('moscow', this.cords.moscow, 0x0000ff);
-        this.addPin('buenosAires', this.cords.buenosAires, 0xffff00);
-        this.addPin('lisbon', this.cords.lisbon, 0xff0000);
+        this.pinCords = new Map();
+
+        this.addAllCords();
+        this.addAllCurves();
+
+    }
+
+    addAllCords() {
+        Object.entries(this.cords).forEach(([name, cord]) => {
+            this.addPin(name, cord);
+        });
+    }
+
+    addAllCurves() {
+        const array = Array.from(this.pinCords.entries());
+
+        for (let i = 0; i < array.length; i++) {
+            const pin = array[i][1];
+            const nextPin = array[i + 1]?.[1];
+
+            if (nextPin) {
+                console.log('curve between', array[i][0], array[i + 1][0]);
+                this.addCurve(pin, nextPin);
+            }
+        }
+    }
+
+    parsePolarCord(cord) {
+        const [degrees, direction] = cord.split(/([0-9.]+)/).filter(Boolean);
+        const value = parseFloat(degrees);
+
+        return [
+            value,
+            direction,
+        ];
     }
 
     parseLatitude(latitude) {
-        const [degrees, direction] = latitude.split(/([0-9.]+)/).filter(Boolean);
-        const value = parseFloat(degrees);
-        return direction?.toUpperCase() === 'S' ? -value : value;
+        const [degrees, direction] = this.parsePolarCord(latitude);
+        return direction?.toLowerCase() === 's' ? -degrees : degrees;
     }
 
     parseLongitude(longitude) {
-        const [degrees, direction] = longitude.split(/([0-9.]+)/).filter(Boolean);
-        const value = parseFloat(degrees);
-        return direction?.toUpperCase() === 'W' ? -value : value;
+        const [degrees, direction] = this.parsePolarCord(longitude);
+        return direction?.toLowerCase() === 'w' ? -degrees : degrees;
     }
 
     addPin(
@@ -130,6 +170,9 @@ export default class Sketch {
             x, y, z
         })
         mesh.position.set(x, y, z);
+        this.pinCords.set(name, {
+            x, y, z
+        });
         this.scene.add(mesh);
     }
 
@@ -152,6 +195,30 @@ export default class Sketch {
         }
     }
 
+    addCurve(
+        p1,
+        p2,
+        color = 0xff0000,
+    ) {
+        const points = [];
+
+        for (let i = 0; i < 50; i++) {
+            const p = new THREE.Vector3().lerpVectors(p1, p2, i / 50);
+            p.normalize();
+            const r = 0.04 * Math.sin(Math.PI * i / 50);
+            p.multiplyScalar(1 + r);
+            points.push(p);
+        }
+
+        const path = new THREE.CatmullRomCurve3(points);
+        const geometry = new THREE.TubeGeometry(path, 20, 0.01, 8, false);
+        const material = new THREE.MeshBasicMaterial({
+            color,
+        });
+        const mesh = new THREE.Mesh(geometry, this.shaderMaterial);
+        this.scene.add(mesh);
+    }
+
     stop() {
         this.isPlaying = false;
     }
@@ -167,7 +234,7 @@ export default class Sketch {
         if (!this.isPlaying) return;
         this.time += 0.05;
 
-        // this.material.uniforms.time.value = this.time;
+        this.shaderMaterial.uniforms.time.value = this.time;
         requestAnimationFrame(this.render.bind(this));
         this.renderer.render(this.scene, this.camera);
     }
